@@ -1,0 +1,6 @@
+<animation-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/loona_sleep_1" android:duration="200"/>
+    <item android:drawable="@drawable/loona_sleep_2" android:duration="200"/>
+    <item android:drawable="@drawable/loona_sleep_3" android:duration="200"/>
+    <item android:drawable="@drawable/loona_sleep_4" android:duration="200"/>
+</animation-list>

@@ -1,0 +1,6 @@
+<animation-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/loona_angry_1" android:duration="120"/>
+    <item android:drawable="@drawable/loona_angry_2" android:duration="120"/>
+    <item android:drawable="@drawable/loona_angry_3" android:duration="120"/>
+    <item android:drawable="@drawable/loona_angry_4" android:duration="120"/>
+</animation-list>
