@@ -63,13 +63,19 @@ class MainActivity : AppCompatActivity() {
         ringInner  = findViewById(R.id.ringInner)
         jarvisRing = findViewById(R.id.jarvisRing)
 
-        ActivityCompat.requestPermissions(this, arrayOf(
+        val permissions = mutableListOf(
             Manifest.permission.RECORD_AUDIO,
             Manifest.permission.READ_CONTACTS,
             Manifest.permission.CALL_PHONE,
             Manifest.permission.CAMERA,
-            Manifest.permission.READ_PHONE_STATE
-        ), 1)
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.READ_SMS,
+            Manifest.permission.READ_CALL_LOG
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            permissions.add(Manifest.permission.ANSWER_PHONE_CALLS)
+        }
+        ActivityCompat.requestPermissions(this, permissions.toTypedArray(), 1)
 
         tts = TextToSpeech(this) {
             tts.setLanguage(Locale.US)

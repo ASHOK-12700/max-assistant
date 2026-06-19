@@ -8,6 +8,7 @@ import android.media.AudioManager
 import android.os.*
 import android.telephony.PhoneStateListener
 import android.telephony.TelephonyManager
+import android.telecom.TelecomManager
 import android.speech.*
 import android.speech.tts.TextToSpeech
 import android.view.*
@@ -556,13 +557,15 @@ class MaxOverlayService : Service() {
 
             c.contains("message ") || c.startsWith("whatsapp ") -> {
                 val after = c.replace("message ","").replace("whatsapp ","").trim()
-                val idx   = after.indexOf(" ")
                 if (c.contains("voice call")) {
                     makeWhatsAppCall(after.replace("voice call", "").trim(), false)
                 } else if (c.contains("video call")) {
                     makeWhatsAppCall(after.replace("video call", "").trim(), true)
-                } else if (idx == -1) speak("say message contact name your message")
-                else sendWhatsApp(after.substring(0,idx), after.substring(idx).trim())
+                } else {
+                    val idx = after.indexOf(" ")
+                    if (idx == -1) speak("say message contact name your message")
+                    else sendWhatsApp(after.substring(0, idx), after.substring(idx).trim())
+                }
                 nextListen()
             }
 
@@ -717,6 +720,80 @@ class MaxOverlayService : Service() {
 
             c.contains("brightness") -> {
                 setBrightness(c); nextListen()
+            }
+
+            // ══════════════════════════════════════════
+            // SYSTEM NAVIGATION & APP MANAGEMENT
+            // ══════════════════════════════════════════
+            c == "go home" || c == "home screen" || c == "open home" -> {
+                MaxAccessibilityService.instance?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
+                speak("going home sir"); nextListen()
+            }
+
+            c == "go back" || c == "back" || c == "previous screen" -> {
+                MaxAccessibilityService.instance?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
+                speak("going back sir"); nextListen()
+            }
+
+            c.contains("recent apps") || c.contains("recents") || c == "show recents" -> {
+                MaxAccessibilityService.instance?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS)
+                speak("showing recent apps sir"); nextListen()
+            }
+
+            c.contains("notifications") || c.contains("read my notifications") -> {
+                val notifs = MaxNotificationService.instance?.getAllNotifications()
+                speak(notifs ?: "I cannot access notifications right now sir. Please ensure notification listener is enabled.")
+                nextListen()
+            }
+
+            c.contains("read whatsapp") || c.contains("any new whatsapp") -> {
+                val msg = MaxNotificationService.instance?.getLastWhatsAppMessage()
+                speak(msg ?: "no new whatsapp messages found sir")
+                nextListen()
+            }
+
+            c.contains("read sms") || c.contains("read my messages") || c.contains("read last message") -> {
+                readLastSMS()
+                nextListen()
+            }
+
+            // ══════════════════════════════════════════
+            // DEVICE CONTROL & CALL HANDLING
+            // ══════════════════════════════════════════
+            c.contains("lock the screen") || c.contains("lock my phone") || c == "lock screen" -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    MaxAccessibilityService.instance?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN)
+                    speak("locking screen sir")
+                } else {
+                    speak("lock screen not supported on this version sir")
+                }
+                nextListen()
+            }
+
+            c.contains("take a screenshot") || c == "screenshot" -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    MaxAccessibilityService.instance?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT)
+                    speak("taking screenshot sir")
+                } else {
+                    speak("screenshot not supported on this version sir")
+                }
+                nextListen()
+            }
+
+            c.contains("answer call") || c.contains("pick up") -> {
+                answerCall()
+                nextListen()
+            }
+
+            c.contains("end call") || c.contains("hang up") || c.contains("cut the call") -> {
+                endCall()
+                nextListen()
+            }
+
+            c.contains("wake up") && c.contains("screen") -> {
+                wakeScreen()
+                speak("waking up screen sir")
+                nextListen()
             }
 
             // ══════════════════════════════════════════
@@ -910,12 +987,16 @@ class MaxOverlayService : Service() {
         // Thinking state UI
         Handler(Looper.getMainLooper()).post {
             popupView?.let { v ->
-                v.findViewById<TextView>(R.id.overlayStatus)?.text = "Processing..."
+                v.findViewById<TextView>(R.id.overlayStatus)?.text = "Thinking..."
+                val mainIcon = v.findViewById<ImageView>(R.id.overlayRingInner)
+                // Use the new thinking animation if it exists as a drawable
+                mainIcon?.setImageResource(R.drawable.thinking_anim)
+                (mainIcon?.drawable as? android.graphics.drawable.AnimationDrawable)?.start()
+                
                 val middle = v.findViewById<ImageView>(R.id.overlayRingMiddle)
                 middle?.startAnimation(AnimationUtils.loadAnimation(this, R.anim.spin_reverse_anim).apply { 
-                    duration = 800 // Faster during thinking
+                    duration = 800 
                 })
-                v.findViewById<View>(R.id.overlayGlow)?.setBackgroundResource(R.drawable.ring_inner) // Ensure blue glow
             }
         }
 
@@ -1010,19 +1091,60 @@ class MaxOverlayService : Service() {
     // ══════════════════════════════════════════
     // HELPERS
     // ══════════════════════════════════════════
-    private fun speak(text: String) {
+    private fun setEmotion(emotion: String) {
+        Handler(Looper.getMainLooper()).post {
+            popupView?.let { v ->
+                val mainIcon = v.findViewById<ImageView>(R.id.overlayRingInner)
+                
+                val resId = when (emotion.lowercase()) {
+                    "happy" -> R.drawable.happy_anim
+                    "sad" -> R.drawable.sad_anim
+                    "cool" -> R.drawable.cool_anim
+                    "love" -> R.drawable.love_anim
+                    "surprised" -> R.drawable.surprised_anim
+                    "angry" -> R.drawable.angry_anim
+                    "thinking" -> R.drawable.thinking_anim
+                    "sleep" -> R.drawable.sleep_anim
+                    else -> R.drawable.ring_inner // Default
+                }
+                
+                mainIcon?.setImageResource(resId)
+                (mainIcon?.drawable as? android.graphics.drawable.AnimationDrawable)?.start()
+                
+                // Set glow color based on emotion
+                val glow = v.findViewById<View>(R.id.overlayGlow)
+                when (emotion.lowercase()) {
+                    "angry" -> glow?.setBackgroundTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.RED))
+                    "happy" -> glow?.setBackgroundTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.GREEN))
+                    "love" -> glow?.setBackgroundTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.MAGENTA))
+                    else -> glow?.setBackgroundTintList(null) // Reset to default blue
+                }
+                
+                // If thinking, speed up the middle ring
+                val middle = v.findViewById<ImageView>(R.id.overlayRingMiddle)
+                if (emotion == "thinking") {
+                    v.findViewById<TextView>(R.id.overlayStatus)?.text = "Thinking..."
+                    middle?.startAnimation(AnimationUtils.loadAnimation(this, R.anim.spin_reverse_anim).apply { 
+                        duration = 800 
+                    })
+                } else {
+                    middle?.startAnimation(AnimationUtils.loadAnimation(this, R.anim.spin_reverse_anim))
+                }
+            }
+        }
+    }
+
+    private fun speak(text: String, emotion: String = "happy") {
+        setEmotion(emotion)
         val params = Bundle()
         params.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "max_utterance")
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, params, "max_utterance")
         
-        // Loona speaking animation
         popupView?.let { v ->
-            val status = v.findViewById<TextView>(R.id.overlayStatus)
-            status?.text = text
-            
-            // Pulse UI while speaking
-            val inner = v.findViewById<ImageView>(R.id.overlayRingInner)
-            inner?.startAnimation(AnimationUtils.loadAnimation(this, R.anim.pulse_anim))
+            v.findViewById<TextView>(R.id.overlayStatus)?.text = text
+            v.findViewById<ImageView>(R.id.overlayRingInner)?.startAnimation(
+                AnimationUtils.loadAnimation(this, R.anim.pulse_anim)
+            )
         }
     }
 
@@ -1046,7 +1168,8 @@ class MaxOverlayService : Service() {
     private fun sendWhatsApp(name: String, msg: String) {
         val num = getContact(name)
         if (num != null) {
-            WhatsAppAccessibilityService.messageToSend = msg
+            MaxAccessibilityService.messageToSend = msg
+            MaxAccessibilityService.autoSend = true
             startActivity(Intent(Intent.ACTION_VIEW).apply {
                 data = android.net.Uri.parse("https://wa.me/$num")
                 setPackage("com.whatsapp")
@@ -1474,6 +1597,73 @@ class MaxOverlayService : Service() {
         } else {
             speak("how much brightness sir")
         }
+    }
+
+    private fun readLastSMS() {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED) {
+            val cursor = contentResolver.query(
+                android.net.Uri.parse("content://sms/inbox"),
+                null, null, null, "date DESC LIMIT 1"
+            )
+            if (cursor != null && cursor.moveToFirst()) {
+                val address = cursor.getString(cursor.getColumnIndexOrThrow("address"))
+                val body = cursor.getString(cursor.getColumnIndexOrThrow("body"))
+                cursor.close()
+                speak("Sir, you have a message from $address. It says: $body")
+            } else {
+                cursor?.close()
+                speak("no sms found sir")
+            }
+        } else {
+            speak("I need SMS permission to read your messages sir")
+        }
+    }
+
+    private fun answerCall() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val telecomManager = getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
+            if (checkSelfPermission(android.Manifest.permission.ANSWER_PHONE_CALLS) == PackageManager.PERMISSION_GRANTED) {
+                try {
+                    telecomManager?.acceptRingingCall()
+                    speak("answering call sir")
+                } catch (e: Exception) {
+                    speak("could not answer call sir")
+                }
+            } else {
+                speak("I need permission to answer calls sir")
+            }
+        } else {
+            speak("automatic answering is not supported on this version sir")
+        }
+    }
+
+    private fun endCall() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val telecomManager = getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
+            if (checkSelfPermission(android.Manifest.permission.ANSWER_PHONE_CALLS) == PackageManager.PERMISSION_GRANTED) {
+                try {
+                    telecomManager?.endCall()
+                    speak("ending call sir")
+                } catch (e: Exception) {
+                    speak("could not end call sir")
+                }
+            } else {
+                speak("I need permission to end calls sir")
+            }
+        } else {
+            speak("cannot end call on this version sir")
+        }
+    }
+
+    private fun wakeScreen() {
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        @Suppress("DEPRECATION")
+        val wakeLock = pm.newWakeLock(
+            PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+            "MaxAssistant:WakeLock"
+        )
+        wakeLock.acquire(3000)
+        wakeLock.release()
     }
 
     private fun playSong(cmd: String) {

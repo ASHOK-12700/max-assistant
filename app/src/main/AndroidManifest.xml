@@ -21,12 +21,17 @@
     <uses-permission android:name="android.permission.WRITE_CALENDAR"/>
     <uses-permission android:name="android.permission.READ_CALENDAR"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+    <uses-permission android:name="android.permission.READ_SMS"/>
+    <uses-permission android:name="android.permission.RECEIVE_SMS"/>
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS"/>
+    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.DISABLE_KEYGUARD"/>
     <!--  ✅ Overlay permission - any screen meedha show avvadam kosam  -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission"/>
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission"/>
     <queries>
         <package android:name="com.whatsapp"/>
         <package android:name="com.google.android.youtube"/>
@@ -34,6 +39,7 @@
         <package android:name="com.spotify.music"/>
         <package android:name="com.instagram.android"/>
         <package android:name="com.phonepe.app"/>
+        <package android:name="org.telegram.messenger"/>
         <intent>
             <action android:name="android.intent.action.MAIN"/>
             <category android:name="android.intent.category.LAUNCHER"/>
@@ -46,17 +52,23 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <service android:name=".WhatsAppAccessibilityService" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="false">
+        <service android:name=".MaxAccessibilityService" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="false">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService"/>
             </intent-filter>
             <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility_config"/>
         </service>
+        <service android:name=".MaxNotificationService" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
         <!--  ✅ MAIN SERVICE - always listen, overlay on any screen  -->
         <service android:name=".MaxOverlayService" android:exported="false" android:foregroundServiceType="microphone|specialUse">
-            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="AI personal assistant that provides voice control and UI overlays over other apps to assist the user even when the main app is in background."/>
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBPROJECT" android:value="AI personal assistant that provides voice control and UI overlays over other apps to assist the user even when the main app is in background."/>
         </service>
         <!--  Background wake word service  -->
         <service android:name=".MaxBackgroundService" android:exported="false" android:foregroundServiceType="microphone"/>
     </application>
+</manifest>
 </manifest>
