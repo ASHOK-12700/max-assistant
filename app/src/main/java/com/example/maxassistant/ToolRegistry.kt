@@ -6,8 +6,11 @@ import android.net.Uri
 import android.provider.AlarmClock
 import android.provider.CalendarContract
 import android.provider.Settings
-import android.view.accessibility.AccessibilityService
+import android.accessibilityservice.AccessibilityService
 import org.json.JSONObject
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 /**
  * Registry of whitelisted tools that MAX can execute.

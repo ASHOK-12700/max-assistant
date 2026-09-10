@@ -21,6 +21,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.*
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.*
 
 // ✅ MAIN SERVICE - ALWAYS RUNNING
 // Creates an invisible overlay window that NEVER closes
@@ -819,48 +820,45 @@ class MaxOverlayService : Service() {
         speak("one moment sir")
         updatePopupStatus("Thinking...")
         
-        Handler(Looper.getMainLooper()).post {
-            kotlinx.coroutines.GlobalScope.launch {
-                nvidiaManager.askNvidia(question) { result ->
+        CoroutineScope(Dispatchers.Main).launch {
+            nvidiaManager.askNvidia(question) { result ->
+                Handler(Looper.getMainLooper()).post {
                     result.onSuccess { ans ->
-                        Handler(Looper.getMainLooper()).post {
-                            try {
-                                if (ans.trim().startsWith("{") && ans.trim().endsWith("}")) {
-                                    val json = JSONObject(ans)
-                                    if (json.optString("type") == "tool_call") {
-                                        val tool = json.optString("tool")
-                                        val args = json.optJSONObject("arguments") ?: JSONObject()
-                                        
-                                        // Check for sensitive tools
-                                        val sensitiveTools = listOf("sendWhatsApp", "makeCall", "fileOp", "productivity")
-                                        if (tool in sensitiveTools && args.optString("action") != "read") {
-                                            pendingToolCall = tool to args
-                                            isAwaitingConfirmation = true
-                                            speak("Sir, do you want me to proceed with $tool?")
-                                        } else {
-                                            val executed = toolRegistry.executeTool(tool, args)
-                                            if (!executed) speak("I understood but couldn't execute $tool, sir.")
-                                        }
+                        try {
+                            if (ans.trim().startsWith("{") && ans.trim().endsWith("}")) {
+                                val json = JSONObject(ans)
+                                if (json.optString("type") == "tool_call") {
+                                    val tool = json.optString("tool")
+                                    val args = json.optJSONObject("arguments") ?: JSONObject()
+                                    
+                                    // Check for sensitive tools
+                                    val sensitiveTools = listOf("sendWhatsApp", "makeCall", "fileOp", "productivity")
+                                    if (tool in sensitiveTools && args.optString("action") != "read") {
+                                        pendingToolCall = tool to args
+                                        isAwaitingConfirmation = true
+                                        speak("Sir, do you want me to proceed with $tool?")
                                     } else {
-                                        speak(ans)
+                                        val executed = toolRegistry.executeTool(tool, args)
+                                        if (!executed) speak("I understood but couldn't execute $tool, sir.")
                                     }
                                 } else {
                                     speak(ans)
                                 }
-                            } catch (e: Exception) {
+                            } else {
                                 speak(ans)
                             }
-                            if (!isAwaitingConfirmation) nextListen()
+                        } catch (e: Exception) {
+                            speak(ans)
                         }
-                    }.onFailure { e ->
-                        Handler(Looper.getMainLooper()).post {
-                            when {
-                                e is java.net.UnknownHostException -> speak("sorry sir, no internet connection")
-                                e.message == "API_KEY_MISSING" -> speak("sir, please add your nvidia api key to local properties")
-                                else -> speak("sorry sir, I'm having trouble connecting to my brain right now")
-                            }
-                            nextListen()
+                        if (!isAwaitingConfirmation) nextListen()
+                    }
+                    result.onFailure { e ->
+                        when {
+                            e is java.net.UnknownHostException -> speak("sorry sir, no internet connection")
+                            e.message == "API_KEY_MISSING" -> speak("sir, please add your nvidia api key to local properties")
+                            else -> speak("sorry sir, I'm having trouble connecting to my brain right now")
                         }
+                        nextListen()
                     }
                 }
             }
@@ -1394,47 +1392,9 @@ class MaxOverlayService : Service() {
         pendingToolCall = "makeCall" to JSONObject().put("contactName", "emergency")
         isAwaitingConfirmation = true
     }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (!android.provider.Settings.System.canWrite(this)) {
-                speak("please allow modify system settings for brightness sir")
-                val intent = Intent(android.provider.Settings.ACTION_MANAGE_WRITE_SETTINGS)
-                intent.data = android.net.Uri.parse("package:$packageName")
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                startActivity(intent)
-                return
-            }
-        }
 
-        val level = when {
-            cmd.contains("high") || cmd.contains("full") || cmd.contains("100") -> 255
-            cmd.contains("low") || cmd.contains("minimum") -> 30
-            cmd.contains("medium") || cmd.contains("50") -> 128
-            cmd.contains("auto") -> {
-                android.provider.Settings.System.putInt(contentResolver, 
-                    android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE, 
-                    android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC)
-                speak("automatic brightness enabled sir")
-                return
-            }
-            else -> {
-                val match = Regex("\\d+").find(cmd)
-                if (match != null) {
-                    val p = match.value.toInt().coerceIn(0, 100)
-                    (p * 2.55).toInt()
-                } else -1
-            }
-        }
-
-        if (level != -1) {
-            android.provider.Settings.System.putInt(contentResolver, 
-                android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE, 
-                android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL)
-            android.provider.Settings.System.putInt(contentResolver, 
-                android.provider.Settings.System.SCREEN_BRIGHTNESS, level)
-            speak("brightness set sir")
-        } else {
-            speak("how much brightness sir")
-        }
+    private fun nextListen() {
+        restartHandler.postDelayed({ listen() }, 1000)
     }
 
     private fun playSong(cmd: String) {
