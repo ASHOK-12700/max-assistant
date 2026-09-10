@@ -23,11 +23,9 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        val groqApiKey = localProperties.getProperty("groq.api.key") ?: ""
         val nvidiaApiKey = localProperties.getProperty("nvidia.api.key") ?: ""
         val nvidiaModel = localProperties.getProperty("nvidia.model") ?: "meta/llama-3.1-405b-instruct"
         
-        buildConfigField("String", "GROQ_API_KEY", "\"$groqApiKey\"")
         buildConfigField("String", "NVIDIA_API_KEY", "\"$nvidiaApiKey\"")
         buildConfigField("String", "NVIDIA_MODEL", "\"$nvidiaModel\"")
     }

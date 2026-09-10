@@ -33,7 +33,7 @@ class NvidiaManager {
 
     suspend fun askNvidia(question: String, callback: (Result<String>) -> Unit) {
         val apiKey = Constants.NVIDIA_API_KEY
-        if (apiKey.isBlank() || apiKey == "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") {
+        if (apiKey.isBlank() || apiKey == "YOUR_NVIDIA_API_KEY_HERE") {
             callback(Result.failure(Exception("API_KEY_MISSING")))
             return
         }
