@@ -1,0 +1,111 @@
+<!--  res/layout/overlay_max.xml  -->
+<!--  Any screen meedha vasthundi - Hey Google style  -->
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/transparent">
+
+    <RelativeLayout
+        android:id="@+id/mainAssistantLayout"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true">
+
+        <RelativeLayout
+            android:id="@+id/ringContainer"
+            android:layout_width="160dp"
+            android:layout_height="160dp"
+            android:layout_centerHorizontal="true"
+            android:layout_marginTop="8dp">
+
+            <!-- Outer Ring: Slow clockwise -->
+            <ImageView
+                android:id="@+id/overlayRingOuter"
+                android:layout_width="160dp"
+                android:layout_height="160dp"
+                android:src="@drawable/ring_outer_premium"
+                android:scaleType="fitXY"
+                android:alpha="0.6" />
+
+            <!-- Middle Ring: Counter-clockwise dash -->
+            <ImageView
+                android:id="@+id/overlayRingMiddle"
+                android:layout_width="130dp"
+                android:layout_height="130dp"
+                android:layout_centerInParent="true"
+                android:src="@drawable/ring_middle_premium"
+                android:scaleType="fitXY"
+                android:alpha="0.8" />
+
+            <!-- Inner Ring: Pulse -->
+            <ImageView
+                android:id="@+id/overlayRingInner"
+                android:layout_width="100dp"
+                android:layout_height="100dp"
+                android:layout_centerInParent="true"
+                android:src="@drawable/ring_inner_premium"
+                android:scaleType="fitXY" />
+
+            <!-- Loona Character Center -->
+            <ImageView
+                android:id="@+id/overlayLoona"
+                android:layout_width="70dp"
+                android:layout_height="70dp"
+                android:layout_centerInParent="true"
+                android:src="@drawable/loona_open"
+                android:scaleType="centerInside" />
+
+            <!-- Glow Effect -->
+            <View
+                android:id="@+id/overlayGlow"
+                android:layout_width="110dp"
+                android:layout_height="110dp"
+                android:layout_centerInParent="true"
+                android:background="@drawable/ring_inner"
+                android:alpha="0.3" />
+
+            <!-- Orbital Particles -->
+            <ImageView
+                android:id="@+id/particle1"
+                android:layout_width="6dp"
+                android:layout_height="6dp"
+                android:layout_centerInParent="true"
+                android:translationX="75dp"
+                android:src="@drawable/dot_particle" />
+
+            <ImageView
+                android:id="@+id/particle2"
+                android:layout_width="4dp"
+                android:layout_height="4dp"
+                android:layout_centerInParent="true"
+                android:translationY="-65dp"
+                android:src="@drawable/dot_particle"
+                android:alpha="0.7" />
+
+        </RelativeLayout>
+
+        <!--  ✅ WAVE VIEW - moved inside to ensure relative positioning  -->
+        <com.example.maxassistant.WaveView
+            android:id="@+id/waveView"
+            android:layout_width="200dp"
+            android:layout_height="40dp"
+            android:layout_below="@id/ringContainer"
+            android:layout_centerHorizontal="true"
+            android:layout_marginTop="20dp"/>
+
+        <!--  Status text - moved inside and centered  -->
+        <TextView
+            android:id="@+id/overlayStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@id/waveView"
+            android:layout_centerHorizontal="true"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:text="Listening..."
+            android:textColor="#4FC3F7"
+            android:textSize="12sp"
+            android:letterSpacing="0.1"
+            android:paddingBottom="4dp"/>
+    </RelativeLayout>
+</RelativeLayout>

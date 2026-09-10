@@ -1,0 +1,46 @@
+<!--  res/drawable/jarvis_ring.xml  -->
+<!--  Jarvis HUD ring - exact same style as reference image  -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--  Background dark blue  -->
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="#0A0F1A"/>
+            <size android:width="300dp" android:height="300dp"/>
+        </shape>
+    </item>
+    <!--  Outermost ring - thin cyan glow  -->
+    <item android:top="2dp" android:bottom="2dp" android:left="2dp" android:right="2dp">
+        <shape android:shape="oval">
+            <stroke android:width="3dp" android:color="#9900E5FF"/>
+            <solid android:color="#00000000"/>
+        </shape>
+    </item>
+    <!--  Outer thick ring  -->
+    <item android:top="18dp" android:bottom="18dp" android:left="18dp" android:right="18dp">
+        <shape android:shape="oval">
+            <stroke android:width="8dp" android:color="#CC0288D1"/>
+            <solid android:color="#00000000"/>
+        </shape>
+    </item>
+    <!--  Middle ring  -->
+    <item android:top="50dp" android:bottom="50dp" android:left="50dp" android:right="50dp">
+        <shape android:shape="oval">
+            <stroke android:width="4dp" android:color="#FF00B0FF"/>
+            <solid android:color="#0A00B0FF"/>
+        </shape>
+    </item>
+    <!--  Inner ring  -->
+    <item android:top="90dp" android:bottom="90dp" android:left="90dp" android:right="90dp">
+        <shape android:shape="oval">
+            <stroke android:width="3dp" android:color="#FF0091EA"/>
+            <solid android:color="#150091EA"/>
+        </shape>
+    </item>
+    <!--  Center glow  -->
+    <item android:top="125dp" android:bottom="125dp" android:left="125dp" android:right="125dp">
+        <shape android:shape="oval">
+            <solid android:color="#FF00E5FF"/>
+            <size android:width="50dp" android:height="50dp"/>
+        </shape>
+    </item>
+</layer-list>

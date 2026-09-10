@@ -1,0 +1,30 @@
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#000000">
+    <!--  ═══════════════════════════════════════  -->
+    <!--  JARVIS RING LAYER - center lo spin avutundi  -->
+    <!--  ═══════════════════════════════════════  -->
+    <!--  Outer ring - slow spin  -->
+    <ImageView android:id="@+id/ringOuter" android:layout_width="320dp" android:layout_height="320dp" android:layout_centerInParent="true" android:src="@drawable/ring_outer" android:alpha="0" android:scaleType="fitXY"/>
+    <!--  Inner ring - reverse spin  -->
+    <ImageView android:id="@+id/ringInner" android:layout_width="240dp" android:layout_height="240dp" android:layout_centerInParent="true" android:src="@drawable/ring_inner" android:alpha="0" android:scaleType="fitXY"/>
+    <!--  ═══════════════════════════════════════  -->
+    <!--  JARVIS RING - background lo show avutundi  -->
+    <!--  App open lo gone, background lo visible   -->
+    <!--  ═══════════════════════════════════════  -->
+    <ImageView android:id="@+id/jarvisRing" android:layout_width="300dp" android:layout_height="300dp" android:layout_centerInParent="true" android:src="@drawable/jarvis_ring" android:visibility="gone" android:scaleType="fitXY"/>
+    <!--  ═══════════════════════════════════════  -->
+    <!--  LOONA - app open lo show avutundi  -->
+    <!--  ═══════════════════════════════════════  -->
+    <ImageView android:id="@+id/robot" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitCenter" android:src="@drawable/loona_open" android:visibility="visible"/>
+    <!--  ═══════════════════════════════════════  -->
+    <!--  GLOW OVERLAY - "Max" antē activate  -->
+    <!--  ═══════════════════════════════════════  -->
+    <View android:id="@+id/glowRing" android:layout_width="280dp" android:layout_height="280dp" android:layout_centerInParent="true" android:background="@drawable/ring_outer" android:alpha="0"/>
+    <!--  ═══════════════════════════════════════  -->
+    <!--  STATUS TEXT - "Command Mode Activated"  -->
+    <!--  ═══════════════════════════════════════  -->
+    <TextView android:id="@+id/statusText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_alignParentBottom="true" android:layout_marginBottom="100dp" android:gravity="center" android:text="" android:textColor="#4FC3F7" android:textSize="13sp" android:textStyle="bold" android:letterSpacing="0.15" android:alpha="0"/>
+    <!--  ═══════════════════════════════════════  -->
+    <!--  MIC BUTTON  -->
+    <!--  ═══════════════════════════════════════  -->
+    <Button android:id="@+id/micBtn" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🎤 Speak" android:layout_alignParentBottom="true" android:layout_centerHorizontal="true" android:layout_marginBottom="30dp" android:backgroundTint="#1A4FC3F7" android:textColor="#4FC3F7" android:paddingStart="24dp" android:paddingEnd="24dp"/>
+</RelativeLayout>
