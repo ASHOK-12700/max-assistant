@@ -574,11 +574,11 @@ class MaxOverlayService : Service() {
         val resolved = intentResolver.resolve(originalCmd)
         
         if (resolved.type != IntentType.NONE) {
-            android.util.Log.d("MAX_ROUTING", "Local Intent Detected: ${resolved.type}")
+            android.util.Log.i("MAX_ROUTING", "LOCAL_MATCH Resolved: ${resolved.type}")
             processResolvedIntent(resolved, originalCmd)
         } else {
             // ✅ FALLBACK TO AI (NVIDIA with Gemini fallback)
-            android.util.Log.d("MAX_ROUTING", "No local intent, falling back to AI")
+            android.util.Log.i("MAX_ROUTING", "AI_FALLBACK triggered for: $originalCmd")
             askAi(originalCmd)
         }
     }
@@ -678,9 +678,10 @@ class MaxOverlayService : Service() {
                 nextListen()
             }
             IntentType.OPEN_APP -> {
+                val target = resolved.target?.lowercase() ?: ""
                 if (resolved.action == "play" || resolved.action == "reels" || resolved.action == "search") {
                     // Targeted App Action
-                    when (resolved.target) {
+                    when (target) {
                         "spotify" -> playSong(resolved.value as? String ?: originalCmd)
                         "youtube" -> {
                              val q = (resolved.value as? String ?: originalCmd).replace("youtube", "").replace("search", "").trim()
@@ -691,19 +692,26 @@ class MaxOverlayService : Service() {
                         }
                         "instagram" -> {
                              if (resolved.action == "reels") {
-                                 // Heuristic for reels
                                  val intent = packageManager.getLaunchIntentForPackage("com.instagram.android")
                                  intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                  startActivity(intent)
-                                 speak("Opening Instagram, sir.")
+                                 speak("Opening Instagram reels, sir.")
                              } else {
                                  openApp("instagram")
                              }
                         }
-                        else -> openApp(resolved.target ?: "")
+                        else -> openApp(target)
                     }
                 } else {
-                    openApp(resolved.target ?: "")
+                    when {
+                        target.contains("camera") -> openCamera(target.contains("front") || target.contains("selfie"))
+                        target.contains("setting") -> {
+                            startActivity(Intent(android.provider.Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            speak("opening settings sir")
+                        }
+                        target.contains("maps") -> openMaps()
+                        else -> openApp(target)
+                    }
                 }
                 nextListen()
             }
@@ -759,9 +767,11 @@ class MaxOverlayService : Service() {
         nextListen()
     }
 
-    private fun askAi(question: String) {
-        speak("one moment sir")
-        updatePopupStatus("Thinking...")
+    private fun askAi(question: String, retryCount: Int = 0) {
+        if (retryCount == 0) {
+            speak("one moment sir")
+            updatePopupStatus("Thinking...")
+        }
         
         serviceScope.launch {
             // 1. Try Primary (NVIDIA)
@@ -769,15 +779,20 @@ class MaxOverlayService : Service() {
             
             if (result.isFailure) {
                 val error = result.exceptionOrNull()
-                if (error?.message == "RESOURCE_EXHAUSTED") {
-                    android.util.Log.w("MAX_AI", "Primary AI rate limited, trying fallback...")
-                    fallbackAi.clearHistory()
-                    result = fallbackAi.askAi(question)
-                } else {
-                    android.util.Log.w("MAX_AI", "Primary AI failed, trying fallback...")
-                    fallbackAi.clearHistory()
-                    result = fallbackAi.askAi(question)
+                val isTransient = error?.message?.contains("429") == true || 
+                                 error?.message?.contains("RESOURCE_EXHAUSTED") == true ||
+                                 error is java.net.SocketTimeoutException
+                
+                if (isTransient && retryCount < 1) {
+                    android.util.Log.w("MAX_AI", "Primary AI transient error, retrying once...")
+                    delay(1000)
+                    askAi(question, retryCount + 1)
+                    return@launch
                 }
+
+                android.util.Log.w("MAX_AI", "Primary AI failed, trying fallback...")
+                fallbackAi.clearHistory()
+                result = fallbackAi.askAi(question)
             }
             
             result.onSuccess { ans ->
@@ -944,9 +959,22 @@ class MaxOverlayService : Service() {
     fun toggleTorch(on: Boolean) {
         try {
             val cm = getSystemService(CAMERA_SERVICE) as android.hardware.camera2.CameraManager
-            cm.setTorchMode(cm.cameraIdList[0], on)
-            speak(if (on) "torch on sir" else "torch off sir")
-        } catch (_: Exception) { speak("torch not available") }
+            // Find camera with flash
+            val cameraId = cm.cameraIdList.firstOrNull { id ->
+                cm.getCameraCharacteristics(id).get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+            } ?: cm.cameraIdList.getOrNull(0)
+
+            if (cameraId != null) {
+                cm.setTorchMode(cameraId, on)
+                speak(if (on) "torch on sir" else "torch off sir")
+                android.util.Log.d("MAX_SVC", "Torch ${if (on) "ON" else "OFF"} using camera $cameraId")
+            } else {
+                speak("sir, no flashlight found on this device")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MAX_SVC", "Torch error: ${e.message}")
+            speak("sir, I couldn't control the torch")
+        }
     }
 
     private fun getBatteryStatus(): String {

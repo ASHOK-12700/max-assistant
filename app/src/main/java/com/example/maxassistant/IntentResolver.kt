@@ -116,7 +116,10 @@ class IntentResolver(private val context: android.content.Context) {
         return ResolvedIntent(IntentType.NONE)
     }
 
-    private fun isIdentity(s: String) = s.contains("who are you") || s.contains("nee peru enti") || s.contains("what is your name") || s.contains("who created you") || s.contains("what can you do") || s == "max" || s == "hello" || s.contains("introduce") || s.contains("evarnivi") || s.contains("em cheyagalavu") || s.contains("help") || s.contains("sahayam")
+    private fun isIdentity(s: String): Boolean {
+        val triggers = listOf("who are you", "nee peru enti", "what is your name", "who created you", "what can you do", "help", "sahayam", "hello", "hi max", "max", "introduce", "evarnivi", "em cheyagalavu")
+        return triggers.any { s.contains(it) }
+    }
 
     private fun isEmotion(s: String) = (s.contains("smile") || s.contains("happy") || s.contains("sad") || s.contains("angry") || s.contains("surprised") || s.contains("love") || s.contains("cool") || s.contains("excited") || s.contains("sleep") || s.contains("blink") || s.contains("నవ్వు") || s.contains("కోపం") || s.contains("ఏడుపు"))
 

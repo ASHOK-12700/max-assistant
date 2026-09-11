@@ -51,11 +51,11 @@ class NvidiaManager : AiProvider {
         android.util.Log.d("MAX_AI", "NVIDIA request started for: $question")
 
         val messagesJson = JSONArray()
-        // System prompt
         messagesJson.put(JSONObject().apply {
             put("role", "system")
             put("content", "You are MAX, a futuristic personal AI assistant like Jarvis. Address user as 'sir'. " +
-                    "Respond concisely. You understand English, Telugu, and Tanglish. " +
+                    "Respond concisely in 1-2 short sentences (max 50 words). Be direct, no fluff, no repeating user questions. " +
+                    "You understand English, Telugu, and Tanglish. " +
                     "If the user wants you to do something, return a JSON object ONLY: " +
                     "{\"type\": \"tool_call\", \"tool\": \"toolName\", \"arguments\": {...}}. " +
                     "Available tools: \n" +

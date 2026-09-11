@@ -50,7 +50,8 @@ class GeminiManager : AiProvider {
         // For simplicity and compatibility, we'll use the 'systemInstruction' field if supported, or just a system message.
         
         val systemPrompt = "You are MAX, a futuristic personal AI assistant like Jarvis. Address user as 'sir'. " +
-                    "Respond concisely. You understand English, Telugu, and Tanglish. " +
+                    "Respond concisely in 1-2 short sentences (max 50 words). Be direct, no fluff, no repeating user questions. " +
+                    "You understand English, Telugu, and Tanglish. " +
                     "If the user wants you to do something, return a JSON object ONLY: " +
                     "{\"type\": \"tool_call\", \"tool\": \"toolName\", \"arguments\": {...}}. " +
                     "Available tools: \n" +
