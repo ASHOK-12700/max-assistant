@@ -10,5 +10,6 @@ enum class Emotion {
     COOL,
     EXCITED,
     SLEEP,
+    BLINK,
     IDLE
 }

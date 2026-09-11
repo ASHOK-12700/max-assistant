@@ -118,7 +118,7 @@ class IntentResolver(private val context: android.content.Context) {
 
     private fun isIdentity(s: String) = s.contains("who are you") || s.contains("nee peru enti") || s.contains("what is your name") || s.contains("who created you") || s.contains("what can you do") || s == "max" || s == "hello" || s.contains("introduce") || s.contains("evarnivi") || s.contains("em cheyagalavu") || s.contains("help") || s.contains("sahayam")
 
-    private fun isEmotion(s: String) = (s.contains("smile") || s.contains("happy") || s.contains("sad") || s.contains("angry") || s.contains("surprised") || s.contains("love") || s.contains("cool") || s.contains("excited") || s.contains("sleep") || s.contains("నవ్వు") || s.contains("కోపం") || s.contains("ఏడుపు"))
+    private fun isEmotion(s: String) = (s.contains("smile") || s.contains("happy") || s.contains("sad") || s.contains("angry") || s.contains("surprised") || s.contains("love") || s.contains("cool") || s.contains("excited") || s.contains("sleep") || s.contains("blink") || s.contains("నవ్వు") || s.contains("కోపం") || s.contains("ఏడుపు"))
 
     private fun resolveEmotion(s: String): ResolvedIntent {
         val emotion = when {
@@ -130,6 +130,7 @@ class IntentResolver(private val context: android.content.Context) {
             s.contains("cool") -> "cool"
             s.contains("excited") -> "excited"
             s.contains("sleep") -> "sleep"
+            s.contains("blink") -> "blink"
             else -> "idle"
         }
         return ResolvedIntent(IntentType.EMOTION, target = emotion)

@@ -1,5 +1,5 @@
-<!--  res/drawable/jarvis_ring.xml  -->
-<!--  Jarvis HUD ring - exact same style as reference image  -->
+<?xml version="1.0" encoding="utf-8"?>
+<!--  Jarvis HUD ring -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <!--  Background dark blue  -->
     <item>

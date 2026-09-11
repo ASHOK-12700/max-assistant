@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <animation-list xmlns:android="http://schemas.android.com/apk/res/android"
     android:oneshot="true">
-
     <item android:drawable="@drawable/loona_open" android:duration="80"/>
     <item android:drawable="@drawable/loona_half" android:duration="60"/>
     <item android:drawable="@drawable/loona_small" android:duration="60"/>
@@ -9,5 +8,4 @@
     <item android:drawable="@drawable/loona_small" android:duration="60"/>
     <item android:drawable="@drawable/loona_half" android:duration="60"/>
     <item android:drawable="@drawable/loona_open" android:duration="80"/>
-
 </animation-list>

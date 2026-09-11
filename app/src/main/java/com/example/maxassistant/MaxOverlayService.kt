@@ -833,6 +833,7 @@ class MaxOverlayService : Service() {
             "cool" -> com.example.maxassistant.emotion.Emotion.COOL
             "excited" -> com.example.maxassistant.emotion.Emotion.EXCITED
             "sleep" -> com.example.maxassistant.emotion.Emotion.SLEEP
+            "blink" -> com.example.maxassistant.emotion.Emotion.BLINK
             else -> com.example.maxassistant.emotion.Emotion.IDLE
         }
         emotionManager?.setEmotion(emotion)

@@ -114,6 +114,13 @@ class EmotionManager(
                 robot.alpha = 0.7f
             }
 
+            // 👀 BLINK
+            Emotion.BLINK -> {
+                robot.setImageResource(R.drawable.blink_anim)
+                val anim = robot.drawable as AnimationDrawable
+                anim.start()
+            }
+
             // 😐 IDLE
             Emotion.IDLE -> {
                 robot.setImageResource(R.drawable.loona_idel)
