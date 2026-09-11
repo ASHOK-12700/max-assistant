@@ -64,7 +64,12 @@ class MaxOverlayService : Service() {
     
     // NEW: Modular Components
     private lateinit var toolRegistry: ToolRegistry
-    private val nvidiaManager = NvidiaManager()
+    private lateinit var intentResolver: IntentResolver
+    private var primaryAi: AiProvider = NvidiaManager()
+    private var fallbackAi: AiProvider = GeminiManager()
+    private val serviceJob = Job()
+    private val serviceScope = CoroutineScope(serviceJob + Dispatchers.Main)
+    private var emotionManager: com.example.maxassistant.emotion.EmotionManager? = null
 
     private val wakeWordsList = listOf(
         "max", "mac", "mack", "macs", "mex", "marx", "marks", "make", "mask", "mux", "mx", "match",
@@ -111,6 +116,7 @@ class MaxOverlayService : Service() {
         telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
         
         toolRegistry = ToolRegistry(this, this)
+        intentResolver = IntentResolver(this)
         
         registerPhoneStateListener()
 
@@ -497,6 +503,9 @@ class MaxOverlayService : Service() {
 
         // Start premium animations
         popupView?.let { v ->
+            val loona = v.findViewById<ImageView>(R.id.overlayLoona)
+            emotionManager = com.example.maxassistant.emotion.EmotionManager(this, loona)
+            
             val outer = v.findViewById<ImageView>(R.id.overlayRingOuter)
             val middle = v.findViewById<ImageView>(R.id.overlayRingMiddle)
             val inner = v.findViewById<ImageView>(R.id.overlayRingInner)
@@ -551,256 +560,190 @@ class MaxOverlayService : Service() {
             return
         }
 
-        var c = normalizeLanguage(originalCmd)
-
-        // Strip wake words
-        for (w in wakeWordsList) {
-            if (c.startsWith(w)) {
-                c = c.removePrefix(w).trim()
-                break
-            }
+        // Multi-command support: split by " and " or " then "
+        val subCommands = originalCmd.split(Regex(" and | then | tarvata | tarvatha "))
+        if (subCommands.size > 1) {
+            executeSequentialCommands(subCommands)
+            return
         }
-        c = c.removePrefix("please ").removePrefix("say ").trim()
 
-        if (c.isEmpty()) { nextListen(); return }
+        processSingleCommand(originalCmd)
+    }
 
-        // ✅ 1. CHECK LOCAL DETERMINISTIC COMMANDS FIRST
-        val handledLocally = processLocalCommand(c)
+    private fun processSingleCommand(originalCmd: String) {
+        val resolved = intentResolver.resolve(originalCmd)
         
-        if (!handledLocally) {
-            // ✅ 2. FALLBACK TO NVIDIA AI
-            askNvidia(originalCmd)
+        if (resolved.type != IntentType.NONE) {
+            android.util.Log.d("MAX_ROUTING", "Local Intent Detected: ${resolved.type}")
+            processResolvedIntent(resolved, originalCmd)
+        } else {
+            // ✅ FALLBACK TO AI (NVIDIA with Gemini fallback)
+            android.util.Log.d("MAX_ROUTING", "No local intent, falling back to AI")
+            askAi(originalCmd)
         }
     }
 
-    private fun normalizeLanguage(input: String): String {
-        var res = input
-        // Expanded Tanglish/Telugu mapping
-        val mappings = mapOf(
-            "open cheyyi" to "open",
-            "open chey" to "open",
-            "open chei" to "open",
-            "teeyi" to "open",
-            "call cheyyi" to "call",
-            "call chey" to "call",
-            "on cheyyi" to "on",
-            "on chey" to "on",
-            "off cheyyi" to "off",
-            "off chey" to "off",
-            "veseyi" to "on",
-            "apeseyi" to "off",
-            "penchu" to "up",
-            "tagginchu" to "down",
-            "ekkuva chei" to "up",
-            "thakkuva chei" to "down",
-            "entha" to "what is",
-            "ippudu" to "now",
-            "cheppu" to "tell me",
-            "ekkada" to "where",
-            "yekkada" to "where"
-        )
-        for ((tel, eng) in mappings) {
-            res = res.replace(tel, eng)
-        }
-        return res
-    }
-
-    private fun processLocalCommand(c: String): Boolean {
-        when {
-            c.contains("send") && c.contains(" to ") -> {
-                val after  = c.replace("send message","").replace("send","").trim()
-                val parts  = after.split(" to ")
-                val msg    = parts.getOrElse(0) { "" }.trim()
-                val person = parts.getOrElse(1) { "" }.trim()
-                if (person.isNotEmpty() && msg.isNotEmpty()) sendWhatsApp(person, msg)
-                else speak("say send hello to contact name")
-                nextListen(); return true
+    private fun processResolvedIntent(resolved: ResolvedIntent, originalCmd: String) {
+        when (resolved.type) {
+            IntentType.IDENTITY -> {
+                val response = when {
+                    originalCmd.contains("who created you") -> "I was created by Ashok sir, a skilled AWS and DevOps engineer."
+                    originalCmd.contains("what can you do") -> "I can control your device, open apps, send WhatsApp messages, set alarms, and chat with you about anything, sir."
+                    else -> "I am Max, your personal AI assistant, created exclusively for you by Ashok sir."
+                }
+                speak(response)
+                nextListen()
             }
-
-            c.contains("message ") || c.startsWith("whatsapp ") -> {
-                val after = c.replace("message ","").replace("whatsapp ","").trim()
-                val idx   = after.indexOf(" ")
-                if (c.contains("voice call")) {
-                    makeWhatsAppCall(after.replace("voice call", "").trim(), false)
-                } else if (c.contains("video call")) {
-                    makeWhatsAppCall(after.replace("video call", "").trim(), true)
-                } else if (idx == -1) speak("say message contact name your message")
-                else sendWhatsApp(after.substring(0,idx), after.substring(idx).trim())
-                nextListen(); return true
+            IntentType.EMOTION -> {
+                setEmotion(resolved.target ?: "idle")
+                speak("Reacting as requested, sir.")
+                nextListen()
             }
-
-            c.contains("call") -> {
-                if (c.contains("whatsapp voice call")) {
-                    makeWhatsAppCall(c.replace("whatsapp voice call", "").trim(), false)
-                } else if (c.contains("whatsapp video call")) {
-                    makeWhatsAppCall(c.replace("whatsapp video call", "").trim(), true)
-                } else if (c.contains("redial")) {
-                    redialLastCall()
+            IntentType.NAVIGATION -> {
+                val action = when(resolved.action) {
+                    "home" -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME
+                    "back" -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK
+                    "recents" -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS
+                    "notifications" -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS
+                    "quickSettings" -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS
+                    else -> -1
+                }
+                if (action != -1) {
+                    val handled = WhatsAppAccessibilityService.instance?.performGlobal(action) ?: false
+                    if (handled) speak("Done, sir.") else speak("I couldn't perform that navigation action, sir.")
+                } else if (resolved.action == "closeApp") {
+                    WhatsAppAccessibilityService.instance?.performGlobal(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+                    speak("Closing app, sir.")
+                } else if (resolved.action == "closeAllApps") {
+                    WhatsAppAccessibilityService.instance?.performGlobal(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS)
+                    speak("Showing recent apps, sir.")
+                }
+                nextListen()
+            }
+            IntentType.TOGGLE_TORCH -> {
+                toggleTorch(resolved.value as? Boolean ?: true)
+                nextListen()
+            }
+            IntentType.VOLUME_CONTROL -> {
+                if (resolved.action == "up") {
+                    audioManager.adjustVolume(AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
+                    speak("volume up sir")
                 } else {
-                    val name = c
-                        .replaceFirst(Regex("calling\\s+"), "")
-                        .replaceFirst(Regex("call\\s+"), "")
-                        .replaceFirst("call", "").trim()
-                    if (name.isNotEmpty()) makeCall(name)
-                    else speak("who should I call sir")
+                    audioManager.adjustVolume(AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
+                    speak("volume down sir")
                 }
-                nextListen(); return true
+                nextListen()
             }
-
-            c.startsWith("open ") || c.startsWith("launch ") || c.startsWith("start ") -> {
-                val target = c.replaceFirst("open ", "").replaceFirst("launch ", "").replaceFirst("start ", "").trim()
-                when {
-                    target.contains("front camera") || target.contains("selfie camera") -> openCamera(true)
-                    target.contains("camera") -> openCamera(false)
-                    target.contains("maps") || target.contains("google maps") -> openMaps()
-                    else -> openApp(target)
+            IntentType.BRIGHTNESS_CONTROL -> {
+                setBrightness(resolved.target ?: originalCmd)
+                nextListen()
+            }
+            IntentType.BATTERY_STATUS -> {
+                speak(getBatteryStatus())
+                nextListen()
+            }
+            IntentType.MAKE_CALL -> {
+                if (resolved.contact == "emergency") redialLastCall()
+                else makeCall(resolved.contact ?: "")
+                nextListen()
+            }
+            IntentType.SEND_WHATSAPP -> {
+                if (resolved.contact.isNullOrEmpty() || (resolved.message.isNullOrEmpty() && !originalCmd.contains("whatsapp"))) {
+                    // If extraction failed but it's a whatsapp intent, maybe ask AI to help or ask user
+                    askAi(originalCmd)
+                } else if (resolved.message.isNullOrEmpty()) {
+                    speak("What should I send to ${resolved.contact}, sir?")
+                    // We'll need to store state to handle the message in next turn, 
+                    // for now, let AI handle conversational extraction.
+                    askAi(originalCmd)
+                } else {
+                    sendWhatsApp(resolved.contact ?: "", resolved.message ?: "")
+                    nextListen()
                 }
-                nextListen(); return true
             }
-
-            c.contains("selfie") -> {
-                val intent = Intent(this, MainActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-                    putExtra("TRIGGER_SELFIE", true)
-                }
-                startActivity(intent)
-                nextListen(); return true
+            IntentType.SET_ALARM -> {
+                setAlarm(resolved.target ?: originalCmd)
+                nextListen()
             }
-
-            c.contains("torch on")  || c.contains("flashlight on")  -> {
-                toggleTorch(true); nextListen(); return true
+            IntentType.SET_TIMER -> {
+                setTimer(resolved.target ?: originalCmd)
+                nextListen()
             }
-            c.contains("torch off") || c.contains("flashlight off") -> {
-                toggleTorch(false); nextListen(); return true
-            }
-
-            c.contains("volume up") -> {
-                audioManager.adjustVolume(AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
-                speak("volume up sir"); nextListen(); return true
-            }
-            c.contains("volume down") -> {
-                audioManager.adjustVolume(AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
-                speak("volume down sir"); nextListen(); return true
-            }
-            c.contains("mute") -> {
-                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0)
-                speak("muted sir"); nextListen(); return true
-            }
-
-            c.contains("battery") || c.contains("charge") -> {
-                if (c.contains("health")) speak(getBatteryHealth())
-                else if (c.contains("temp")) speak(getBatteryTemp())
-                else if (c.contains("source")) speak(getPowerSource())
-                else speak(getBatteryStatus())
-                nextListen(); return true
-            }
-
-            c.contains("time") -> {
+            IntentType.TIME_DATE -> {
                 val cal = Calendar.getInstance()
                 val h = cal.get(Calendar.HOUR_OF_DAY)
                 val m = cal.get(Calendar.MINUTE)
-                val timeStr = if (m == 0) "it is $h o clock sir" else "it is $h $m sir"
-                if (c.contains("full") || c.contains("complete")) {
-                    val date = cal.get(Calendar.DAY_OF_MONTH)
-                    val month = cal.getDisplayName(Calendar.MONTH, Calendar.LONG, Locale.getDefault())
-                    val day = cal.getDisplayName(Calendar.DAY_OF_WEEK, Calendar.LONG, Locale.getDefault())
-                    speak("it is $timeStr on $day, the $date of $month sir")
+                val day = cal.getDisplayName(Calendar.DAY_OF_WEEK, Calendar.LONG, Locale.getDefault())
+                speak("It is $h $m on $day, sir.")
+                nextListen()
+            }
+            IntentType.OPEN_APP -> {
+                if (resolved.action == "play" || resolved.action == "reels" || resolved.action == "search") {
+                    // Targeted App Action
+                    when (resolved.target) {
+                        "spotify" -> playSong(resolved.value as? String ?: originalCmd)
+                        "youtube" -> {
+                             val q = (resolved.value as? String ?: originalCmd).replace("youtube", "").replace("search", "").trim()
+                             val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://www.youtube.com/results?search_query=${android.net.Uri.encode(q)}"))
+                             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                             startActivity(intent)
+                             speak("Searching YouTube, sir.")
+                        }
+                        "instagram" -> {
+                             if (resolved.action == "reels") {
+                                 // Heuristic for reels
+                                 val intent = packageManager.getLaunchIntentForPackage("com.instagram.android")
+                                 intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                 startActivity(intent)
+                                 speak("Opening Instagram, sir.")
+                             } else {
+                                 openApp("instagram")
+                             }
+                        }
+                        else -> openApp(resolved.target ?: "")
+                    }
                 } else {
-                    speak(timeStr)
+                    openApp(resolved.target ?: "")
                 }
-                nextListen(); return true
+                nextListen()
             }
-
-            c.contains("date") -> {
-                val cal = Calendar.getInstance()
-                speak("today is ${cal.get(Calendar.DAY_OF_MONTH)} " +
-                        "${cal.getDisplayName(Calendar.MONTH, Calendar.LONG, Locale.getDefault())} sir")
-                nextListen(); return true
-            }
-
-            c.contains("day of the week") || c.startsWith("what day") -> {
-                val day = Calendar.getInstance().getDisplayName(Calendar.DAY_OF_WEEK, Calendar.LONG, Locale.getDefault())
-                speak("today is $day sir"); nextListen(); return true
-            }
-
-            c.contains("month") -> {
-                val month = Calendar.getInstance().getDisplayName(Calendar.MONTH, Calendar.LONG, Locale.getDefault())
-                speak("it is $month sir"); nextListen(); return true
-            }
-
-            c.contains("year") -> {
-                val year = Calendar.getInstance().get(Calendar.YEAR)
-                speak("the year is $year sir"); nextListen(); return true
-            }
-
-            c.contains("wifi") -> {
-                startActivity(Intent(android.provider.Settings.ACTION_WIFI_SETTINGS).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                })
-                speak("opening wifi sir"); nextListen(); return true
-            }
-            c.contains("bluetooth") -> {
-                startActivity(Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                })
-                speak("opening bluetooth sir"); nextListen(); return true
-            }
-
-            c.contains("alarm") -> {
-                if (c.contains("cancel") || c.contains("delete")) cancelAlarms()
-                else if (c.contains("list") || c.contains("show")) listAlarms()
-                else setAlarm(c)
-                nextListen(); return true
-            }
-
-            c.contains("reminder") -> {
-                setReminder(c); nextListen(); return true
-            }
-
-            c.contains("timer") -> {
-                setTimer(c); nextListen(); return true
-            }
-
-            c.contains("dnd on") || c.contains("enable dnd") -> {
-                toggleDND(true); nextListen(); return true
-            }
-            c.contains("dnd off") || c.contains("disable dnd") -> {
-                toggleDND(false); nextListen(); return true
-            }
-
-            c.contains("silent mode") -> {
-                setRingerMode(AudioManager.RINGER_MODE_SILENT); nextListen(); return true
-            }
-            c.contains("vibrate mode") -> {
-                setRingerMode(AudioManager.RINGER_MODE_VIBRATE); nextListen(); return true
-            }
-            c.contains("normal mode") || c.contains("ringer on") -> {
-                setRingerMode(AudioManager.RINGER_MODE_NORMAL); nextListen(); return true
-            }
-
-            c.contains("brightness") -> {
-                setBrightness(c); nextListen(); return true
-            }
-
-            c.contains("emergency") || c.contains("help me") || c.contains("danger") -> {
-                triggerEmergencyMode()
-                nextListen(); return true
-            }
-
-            // Identity features...
-            c == "who are you" || c == "what is your name" ||
-                    c == "introduce yourself" || c.contains("tell me about yourself") -> {
-                speak("I am Max, your personal AI assistant, created exclusively for you by Ashok sir.")
-                nextListen(); return true
-            }
-            // ... (keep others but return true)
-            c.contains("who created you") || c.contains("who made you") -> {
-                speak("I was created by Ashok sir, a skilled AWS and DevOps engineer.")
-                nextListen(); return true
-            }
+            else -> askAi(originalCmd)
         }
-        return false
     }
+
+    private fun executeSequentialCommands(commands: List<String>) {
+        serviceScope.launch {
+            for ((index, cmd) in commands.withIndex()) {
+                val cleanCmd = cmd.trim()
+                if (cleanCmd.isEmpty()) continue
+                
+                android.util.Log.d("MAX_CHAIN", "Executing step ${index + 1}: $cleanCmd")
+                
+                val resolved = intentResolver.resolve(cleanCmd)
+                if (resolved.type != IntentType.NONE) {
+                    processResolvedIntent(resolved, cleanCmd)
+                } else {
+                    // If AI is needed in a chain, we wait for it
+                    val result = primaryAi.askAi(cleanCmd).getOrNull() ?: fallbackAi.askAi(cleanCmd).getOrNull()
+                    result?.let { ans ->
+                        if (ans.trim().startsWith("{") && ans.trim().endsWith("}")) {
+                             val json = JSONObject(ans)
+                             if (json.optString("type") == "tool_call") {
+                                 toolRegistry.executeTool(json.optString("tool"), json.optJSONObject("arguments") ?: JSONObject())
+                             }
+                        } else {
+                            speak(ans)
+                        }
+                    }
+                }
+                
+                // Small delay between steps for Android UI to catch up
+                delay(2000)
+            }
+            nextListen()
+        }
+    }
+
 
     private fun handleConfirmation(cmd: String) {
         if (cmd.contains("yes") || cmd.contains("confirm") || cmd.contains("sare") || cmd.contains("avunu")) {
@@ -816,53 +759,83 @@ class MaxOverlayService : Service() {
         nextListen()
     }
 
-    private fun askNvidia(question: String) {
+    private fun askAi(question: String) {
         speak("one moment sir")
         updatePopupStatus("Thinking...")
         
-        CoroutineScope(Dispatchers.Main).launch {
-            nvidiaManager.askNvidia(question) { result ->
-                Handler(Looper.getMainLooper()).post {
-                    result.onSuccess { ans ->
-                        try {
-                            if (ans.trim().startsWith("{") && ans.trim().endsWith("}")) {
-                                val json = JSONObject(ans)
-                                if (json.optString("type") == "tool_call") {
-                                    val tool = json.optString("tool")
-                                    val args = json.optJSONObject("arguments") ?: JSONObject()
-                                    
-                                    // Check for sensitive tools
-                                    val sensitiveTools = listOf("sendWhatsApp", "makeCall", "fileOp", "productivity")
-                                    if (tool in sensitiveTools && args.optString("action") != "read") {
-                                        pendingToolCall = tool to args
-                                        isAwaitingConfirmation = true
-                                        speak("Sir, do you want me to proceed with $tool?")
-                                    } else {
-                                        val executed = toolRegistry.executeTool(tool, args)
-                                        if (!executed) speak("I understood but couldn't execute $tool, sir.")
-                                    }
-                                } else {
-                                    speak(ans)
-                                }
-                            } else {
-                                speak(ans)
-                            }
-                        } catch (e: Exception) {
-                            speak(ans)
-                        }
-                        if (!isAwaitingConfirmation) nextListen()
-                    }
-                    result.onFailure { e ->
-                        when {
-                            e is java.net.UnknownHostException -> speak("sorry sir, no internet connection")
-                            e.message == "API_KEY_MISSING" -> speak("sir, please add your nvidia api key to local properties")
-                            else -> speak("sorry sir, I'm having trouble connecting to my brain right now")
-                        }
-                        nextListen()
-                    }
+        serviceScope.launch {
+            // 1. Try Primary (NVIDIA)
+            var result = primaryAi.askAi(question)
+            
+            if (result.isFailure) {
+                val error = result.exceptionOrNull()
+                if (error?.message == "RESOURCE_EXHAUSTED") {
+                    android.util.Log.w("MAX_AI", "Primary AI rate limited, trying fallback...")
+                    fallbackAi.clearHistory()
+                    result = fallbackAi.askAi(question)
+                } else {
+                    android.util.Log.w("MAX_AI", "Primary AI failed, trying fallback...")
+                    fallbackAi.clearHistory()
+                    result = fallbackAi.askAi(question)
                 }
             }
+            
+            result.onSuccess { ans ->
+                try {
+                    if (ans.trim().startsWith("{") && ans.trim().endsWith("}")) {
+                        val json = JSONObject(ans)
+                        if (json.optString("type") == "tool_call") {
+                            val tool = json.optString("tool")
+                            val args = json.optJSONObject("arguments") ?: JSONObject()
+                            
+                            // Check for sensitive tools that need confirmation
+                            val sensitiveTools = listOf("sendWhatsApp", "makeCall", "fileOp", "productivity")
+                            if (tool in sensitiveTools && args.optString("action") != "read") {
+                                pendingToolCall = tool to args
+                                isAwaitingConfirmation = true
+                                speak("Sir, do you want me to proceed with $tool?")
+                            } else {
+                                val executed = toolRegistry.executeTool(tool, args)
+                                if (!executed) speak("I understood but couldn't execute $tool, sir.")
+                            }
+                        } else {
+                            speak(ans)
+                        }
+                    } else {
+                        speak(ans)
+                    }
+                } catch (e: Exception) {
+                    speak(ans)
+                }
+                if (!isAwaitingConfirmation) nextListen()
+            }
+            
+            result.onFailure { e ->
+                android.util.Log.e("MAX_AI", "All AI providers failed: ${e.message}")
+                when {
+                    e is java.net.UnknownHostException -> speak("I'm offline, sir. Local commands are still working.")
+                    e.message == "API_KEY_MISSING" -> speak("Sir, AI configuration is incomplete. Please check local properties.")
+                    else -> speak("I'm having trouble reaching my AI service right now. My local commands are still available.")
+                }
+                nextListen()
+            }
         }
+    }
+
+    fun setEmotion(emotionStr: String) {
+        val emotion = when (emotionStr.lowercase()) {
+            "happy", "smile" -> com.example.maxassistant.emotion.Emotion.HAPPY
+            "sad" -> com.example.maxassistant.emotion.Emotion.SAD
+            "angry" -> com.example.maxassistant.emotion.Emotion.ANGRY
+            "thinking" -> com.example.maxassistant.emotion.Emotion.THINKING
+            "surprised" -> com.example.maxassistant.emotion.Emotion.SURPRISED
+            "love" -> com.example.maxassistant.emotion.Emotion.LOVE
+            "cool" -> com.example.maxassistant.emotion.Emotion.COOL
+            "excited" -> com.example.maxassistant.emotion.Emotion.EXCITED
+            "sleep" -> com.example.maxassistant.emotion.Emotion.SLEEP
+            else -> com.example.maxassistant.emotion.Emotion.IDLE
+        }
+        emotionManager?.setEmotion(emotion)
     }
 
     // ══════════════════════════════════════════
@@ -916,7 +889,15 @@ class MaxOverlayService : Service() {
     fun sendWhatsApp(name: String, msg: String) {
         val num = getContact(name)
         if (num != null) {
+            if (WhatsAppAccessibilityService.instance == null) {
+                speak("Sir, please enable Accessibility Service for Max to send WhatsApp messages.")
+                val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(intent)
+                return
+            }
             WhatsAppAccessibilityService.messageToSend = msg
+            WhatsAppAccessibilityService.isAutoMessaging = true
             startActivity(Intent(Intent.ACTION_VIEW).apply {
                 data = android.net.Uri.parse("https://wa.me/$num")
                 setPackage("com.whatsapp")
@@ -1290,20 +1271,42 @@ class MaxOverlayService : Service() {
     private fun setAlarm(cmd: String) {
         val nums = Regex("\\d+").findAll(cmd).map { it.value.toInt() }.toList()
         var h = -1; var m = 0
-        when {
-            nums.size >= 2 -> { h = nums[0]; m = nums[1] }
-            nums.size == 1 -> { h = nums[0] }
-            else -> { speak("please say a time sir"); return }
+        
+        if (cmd.contains("in") && (cmd.contains("minute") || cmd.contains("hour"))) {
+            // Relative time
+            val cal = Calendar.getInstance()
+            if (cmd.contains("minute") && nums.isNotEmpty()) {
+                cal.add(Calendar.MINUTE, nums[0])
+            } else if (cmd.contains("hour") && nums.isNotEmpty()) {
+                cal.add(Calendar.HOUR_OF_DAY, nums[0])
+            }
+            h = cal.get(Calendar.HOUR_OF_DAY)
+            m = cal.get(Calendar.MINUTE)
+        } else {
+            // Absolute time
+            when {
+                nums.size >= 2 -> { h = nums[0]; m = nums[1] }
+                nums.size == 1 -> { h = nums[0] }
+                else -> { speak("please say a time sir"); return }
+            }
+            if (cmd.contains("pm") && h < 12) h += 12
+            if (cmd.contains("am") && h == 12) h = 0
         }
-        if (cmd.contains("pm") && h < 12) h += 12
-        if (cmd.contains("am") && h == 12) h = 0
-        startActivity(Intent(android.provider.AlarmClock.ACTION_SET_ALARM).apply {
-            putExtra(android.provider.AlarmClock.EXTRA_HOUR, h)
-            putExtra(android.provider.AlarmClock.EXTRA_MINUTES, m)
-            putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, false)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        })
-        speak("alarm set for $h ${if (m == 0) "o clock" else m.toString()} sir")
+
+        if (h != -1) {
+            try {
+                val intent = Intent(android.provider.AlarmClock.ACTION_SET_ALARM).apply {
+                    putExtra(android.provider.AlarmClock.EXTRA_HOUR, h)
+                    putExtra(android.provider.AlarmClock.EXTRA_MINUTES, m)
+                    putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, false)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(intent)
+                speak("alarm set for $h ${if (m == 0) "o clock" else m.toString()} sir")
+            } catch (e: Exception) {
+                speak("I couldn't set the alarm, sir.")
+            }
+        }
     }
 
     private fun toggleDND(on: Boolean) {
@@ -1606,6 +1609,7 @@ class MaxOverlayService : Service() {
 
     override fun onDestroy() {
         isRunning = false
+        serviceJob.cancel()
         telephonyManager.listen(phoneStateListener, PhoneStateListener.LISTEN_NONE)
         suppressBeeps(false) // 🔥 Restore all sounds
         try { unregisterReceiver(manualWakeReceiver) } catch (_: Exception) {}

@@ -35,6 +35,7 @@ class MainActivity : AppCompatActivity() {
 
     private var isAwake = false
     private val awakeHandler = Handler(Looper.getMainLooper())
+    private lateinit var emotionManager: com.example.maxassistant.emotion.EmotionManager
 
     private val CAMERA_REQ = 100
 
@@ -62,6 +63,7 @@ class MainActivity : AppCompatActivity() {
         ringOuter  = findViewById(R.id.ringOuter)
         ringInner  = findViewById(R.id.ringInner)
         jarvisRing = findViewById(R.id.jarvisRing)
+        emotionManager = com.example.maxassistant.emotion.EmotionManager(this, robot)
 
         val perms = mutableListOf(
             Manifest.permission.RECORD_AUDIO,
@@ -150,7 +152,7 @@ class MainActivity : AppCompatActivity() {
     // ══════════════════════════════════════════
     private fun jarvisWake() {
         isAwake = true
-        blink()
+        emotionManager.setEmotion(com.example.maxassistant.emotion.Emotion.HAPPY)
         tts.speak("yes boss, command mode activated", TextToSpeech.QUEUE_FLUSH, null, null)
 
         // UI
@@ -193,7 +195,7 @@ class MainActivity : AppCompatActivity() {
         awakeHandler.removeCallbacksAndMessages(null)
         blinkHandler.removeCallbacks(blinkRunnable)
         jarvisUIHide()
-        robot.setImageResource(R.drawable.loona_open)
+        emotionManager.setEmotion(com.example.maxassistant.emotion.Emotion.IDLE)
     }
 
     private fun jarvisUIHide() {

@@ -25,9 +25,11 @@ android {
 
         val nvidiaApiKey = localProperties.getProperty("nvidia.api.key") ?: ""
         val nvidiaModel = localProperties.getProperty("nvidia.model") ?: "meta/llama-3.1-405b-instruct"
+        val geminiApiKey = localProperties.getProperty("gemini.api.key") ?: ""
         
         buildConfigField("String", "NVIDIA_API_KEY", "\"$nvidiaApiKey\"")
         buildConfigField("String", "NVIDIA_MODEL", "\"$nvidiaModel\"")
+        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
     }
 
     buildFeatures {

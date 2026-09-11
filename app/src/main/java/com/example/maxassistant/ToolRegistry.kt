@@ -12,6 +12,9 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
+import com.example.maxassistant.model.ToolResult
+import com.example.maxassistant.model.ToolStatus
+
 /**
  * Registry of whitelisted tools that MAX can execute.
  */
@@ -19,11 +22,16 @@ class ToolRegistry(private val context: Context, private val overlayService: Max
     private val dataManager = DataManager(context)
 
     fun executeTool(toolName: String, args: JSONObject): Boolean {
+        val result = executeToolV2(toolName, args)
+        return result.status == ToolStatus.SUCCESS
+    }
+
+    private fun executeToolV2(toolName: String, args: JSONObject): ToolResult {
         return when (toolName) {
             "openApp" -> {
                 val appName = args.optString("appName")
                 overlayService.openApp(appName)
-                true
+                ToolResult(ToolStatus.SUCCESS)
             }
             "makeCall" -> {
                 val contactName = args.optString("contactName")
@@ -32,18 +40,18 @@ class ToolRegistry(private val context: Context, private val overlayService: Max
                 } else {
                     overlayService.makeCall(contactName)
                 }
-                true
+                ToolResult(ToolStatus.SUCCESS)
             }
             "sendWhatsApp" -> {
                 val contactName = args.optString("contactName")
                 val message = args.optString("message")
                 overlayService.sendWhatsApp(contactName, message)
-                true
+                ToolResult(ToolStatus.SUCCESS)
             }
             "toggleTorch" -> {
                 val state = args.optBoolean("state", true)
                 overlayService.toggleTorch(state)
-                true
+                ToolResult(ToolStatus.SUCCESS)
             }
             "setAlarm" -> {
                 val hour = args.optInt("hour", -1)
@@ -58,7 +66,7 @@ class ToolRegistry(private val context: Context, private val overlayService: Max
                     context.startActivity(intent)
                     overlayService.speak("Setting alarm for $hour:$minute, sir.")
                 }
-                true
+                ToolResult(ToolStatus.SUCCESS)
             }
             "setTimer" -> {
                 val seconds = args.optInt("seconds", 60)
@@ -69,7 +77,7 @@ class ToolRegistry(private val context: Context, private val overlayService: Max
                 }
                 context.startActivity(intent)
                 overlayService.speak("Timer set for $seconds seconds, sir.")
-                true
+                ToolResult(ToolStatus.SUCCESS)
             }
             "openMaps" -> {
                 val query = args.optString("query")
@@ -79,11 +87,11 @@ class ToolRegistry(private val context: Context, private val overlayService: Max
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 })
                 overlayService.speak("Opening maps, sir.")
-                true
+                ToolResult(ToolStatus.SUCCESS)
             }
             "navigation" -> {
                 val action = args.optString("action")
-                val accAction = when (action) {
+                var accAction = when (action) {
                     "home" -> AccessibilityService.GLOBAL_ACTION_HOME
                     "back" -> AccessibilityService.GLOBAL_ACTION_BACK
                     "recents" -> AccessibilityService.GLOBAL_ACTION_RECENTS
@@ -91,16 +99,24 @@ class ToolRegistry(private val context: Context, private val overlayService: Max
                     "quickSettings" -> AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS
                     "lockScreen" -> if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN else -1
                     "screenshot" -> if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT else -1
+                    "closeApp" -> AccessibilityService.GLOBAL_ACTION_BACK
+                    "closeAllApps" -> AccessibilityService.GLOBAL_ACTION_RECENTS
                     else -> -1
                 }
+                
                 if (accAction != -1) {
                     val handled = WhatsAppAccessibilityService.instance?.performGlobal(accAction) ?: false
-                    if (handled) overlayService.speak("Done, sir.")
-                    else overlayService.speak("Sir, please enable Accessibility Service for Max.")
+                    if (handled) {
+                        overlayService.speak("Done, sir.")
+                        ToolResult(ToolStatus.SUCCESS)
+                    } else {
+                        overlayService.speak("Sir, please enable Accessibility Service for Max.")
+                        ToolResult(ToolStatus.PERMISSION_REQUIRED)
+                    }
                 } else {
                     overlayService.speak("Sir, this navigation action is not supported on your Android version.")
+                    ToolResult(ToolStatus.NOT_SUPPORTED)
                 }
-                true
             }
             "systemControl" -> {
                 val feature = args.optString("feature")
@@ -125,6 +141,7 @@ class ToolRegistry(private val context: Context, private val overlayService: Max
                         } else {
                             context.startActivity(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                             overlayService.speak("Sir, please allow modify system settings for rotate control.")
+                            return ToolResult(ToolStatus.PERMISSION_REQUIRED)
                         }
                     }
                     "airplaneMode" -> {
@@ -140,7 +157,7 @@ class ToolRegistry(private val context: Context, private val overlayService: Max
                         overlayService.speak("Opening Wireless settings for hotspot, sir.")
                     }
                 }
-                true
+                ToolResult(ToolStatus.SUCCESS)
             }
             "mediaControl" -> {
                 val action = args.optString("action")
@@ -157,23 +174,26 @@ class ToolRegistry(private val context: Context, private val overlayService: Max
                     am.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, event))
                     am.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, event))
                     overlayService.speak("Media $action, sir.")
+                    ToolResult(ToolStatus.SUCCESS)
+                } else {
+                    ToolResult(ToolStatus.NOT_SUPPORTED)
                 }
-                true
             }
             "readNotifications" -> {
                 val count = args.optInt("count", 3)
                 val notifs = MaxNotificationListener.instance?.getLatestNotifications(count)
                 if (notifs.isNullOrEmpty()) {
                     overlayService.speak("Sir, I found no active notifications, or you need to grant me notification access.")
+                    ToolResult(ToolStatus.FAILED)
                 } else {
                     overlayService.speak("Sir, here are your latest notifications: " + notifs.joinToString(". "))
+                    ToolResult(ToolStatus.SUCCESS)
                 }
-                true
             }
             "readSMS" -> {
                 val info = overlayService.getLastSMS()
                 overlayService.speak(info)
-                true
+                ToolResult(ToolStatus.SUCCESS)
             }
             "smartSearch" -> {
                 val provider = args.optString("provider")
@@ -195,8 +215,10 @@ class ToolRegistry(private val context: Context, private val overlayService: Max
                 if (intent != null) {
                     context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     overlayService.speak("Searching for $query on $provider, sir.")
+                    ToolResult(ToolStatus.SUCCESS)
+                } else {
+                    ToolResult(ToolStatus.NOT_SUPPORTED)
                 }
-                true
             }
             "productivity" -> {
                 val category = args.optString("category") // notes, tasks, shopping
@@ -244,7 +266,7 @@ class ToolRegistry(private val context: Context, private val overlayService: Max
                         }
                     }
                 }
-                true
+                ToolResult(ToolStatus.SUCCESS)
             }
             "utility" -> {
                 val action = args.optString("action")
@@ -273,17 +295,17 @@ class ToolRegistry(private val context: Context, private val overlayService: Max
                         overlayService.speak("Sir, you are ${currentYear - birthYear} years old.")
                     }
                 }
-                true
+                ToolResult(ToolStatus.SUCCESS)
             }
             "phoneInfo" -> {
                 val info = overlayService.getDeviceInfo(args.optString("query", "device"))
                 overlayService.speak(info)
-                true
+                ToolResult(ToolStatus.SUCCESS)
             }
             "missedCalls" -> {
                 val info = overlayService.getMissedCalls()
                 overlayService.speak(info)
-                true
+                ToolResult(ToolStatus.SUCCESS)
             }
             "fileOp" -> {
                 val action = args.optString("action")
@@ -299,7 +321,7 @@ class ToolRegistry(private val context: Context, private val overlayService: Max
                         overlayService.speak("Opening documents, sir.")
                     }
                 }
-                true
+                ToolResult(ToolStatus.SUCCESS)
             }
             "health" -> {
                 val action = args.optString("action")
@@ -311,7 +333,7 @@ class ToolRegistry(private val context: Context, private val overlayService: Max
                         overlayService.speak("Sir, remember to drink water. Staying hydrated is essential for your health.")
                     }
                 }
-                true
+                ToolResult(ToolStatus.SUCCESS)
             }
             "automation" -> {
                 val mode = args.optString("mode")
@@ -329,12 +351,12 @@ class ToolRegistry(private val context: Context, private val overlayService: Max
                         overlayService.speak("Study mode activated, sir. I will silence all distractions.")
                     }
                 }
-                true
+                ToolResult(ToolStatus.SUCCESS)
             }
             "readScreen" -> {
                 val content = WhatsAppAccessibilityService.instance?.readCurrentScreen() ?: "Accessibility service is not active, sir."
                 overlayService.speak(content)
-                true
+                ToolResult(ToolStatus.SUCCESS)
             }
             "socialApps" -> {
                 val app = args.optString("app")
@@ -360,11 +382,14 @@ class ToolRegistry(private val context: Context, private val overlayService: Max
                     if (intent != null) {
                         context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                         overlayService.speak("Opening $app, sir.")
+                        ToolResult(ToolStatus.SUCCESS)
                     } else {
                         overlayService.speak("Sir, $app is not installed on this device.")
+                        ToolResult(ToolStatus.NOT_FOUND)
                     }
+                } else {
+                    ToolResult(ToolStatus.NOT_SUPPORTED)
                 }
-                true
             }
             "travel" -> {
                 val query = when (args.optString("type")) {
@@ -379,9 +404,10 @@ class ToolRegistry(private val context: Context, private val overlayService: Max
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 })
                 overlayService.speak("Finding nearby $query, sir.")
-                true
+                ToolResult(ToolStatus.SUCCESS)
             }
-            else -> false
+            else -> ToolResult(ToolStatus.NOT_SUPPORTED)
         }
     }
 }
+
